@@ -97,7 +97,7 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     Returns:
       _network_type object containing quantile value outputs of the network.
     """
-
+    # specify parameter initialization
     weights_initializer = slim.variance_scaling_initializer(
         factor=1.0 / np.sqrt(3.0), mode='FAN_IN', uniform=True)
 
@@ -116,12 +116,12 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
 
     # replicate conv output for each quantile and 
     # add fully-connected layers for each action
-    batch_size = net.get_shape().as_list()[0] #32
-    net = tf.tile(net,[self.num_quantiles,1]) #64
+    batch_size = net.get_shape().as_list()[0] 
+    net = tf.tile(net,[self.num_quantiles,1]) 
     net = slim.fully_connected(net, 512, 
           weights_initializer=weights_initializer)
 
-    # final fully-connected layer with |A|x|tau| quantile values
+    # final fully-connected layer with |tau|x|A| quantile values
     quantile_values = slim.fully_connected(net, self.num_actions, 
         activation_fn=None,
         weights_initializer=weights_initializer)
@@ -162,7 +162,7 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     # e.g. if num_actions is 2, it might look something like this:
     # Vals for Quantile .2  Vals for Quantile .4  Vals for Quantile .6
     #    [[0.1, 0.5],         [0.15, -0.3],          [0.15, -0.2]]
-    # Q-values = [(0.1 + 0.15 + 0.15)/3, (0.5 + 0.15 + -0.2)/3].
+    # Q-values = [(0.1 + 0.15 + 0.15)/3, (0.5 + 0.15 + -0.2)/3].    
     self._q_values = tf.reduce_mean(self._net_outputs.quantile_values, axis=0)
     self._q_argmax = tf.argmax(self._q_values, axis=0)
 

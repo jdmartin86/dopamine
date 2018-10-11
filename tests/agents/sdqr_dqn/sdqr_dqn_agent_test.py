@@ -31,7 +31,7 @@ slim = tf.contrib.slim
 class SDominatedQRAgentTest(tf.test.TestCase):
 
   def setUp(self):
-    self._num_actions = 4
+    self._num_actions = 2
     self.observation_shape = dqn_agent.OBSERVATION_SHAPE
     self.stack_size = dqn_agent.STACK_SIZE
     self.ones_state = np.ones(
@@ -39,8 +39,7 @@ class SDominatedQRAgentTest(tf.test.TestCase):
 
   def _create_test_agent(self, sess):
 
-    class MockSDominatedQRAgent(
-        sdqr_dqn_agent.SDominatedQRAgent):
+    class MockSDominatedQRAgent(sdqr_dqn_agent.SDominatedQRAgent):
 
       def _network_template(self, state):
         # This dummy network allows us to deterministically anticipate that the
@@ -48,20 +47,22 @@ class SDominatedQRAgentTest(tf.test.TestCase):
         # corresponding quantile inputs.
         # State/Quantile shapes will be k x 1, (N x batch_size) x 1,
         # or (N' x batch_size) x 1.
-        state_net = slim.flatten(state)
-        state_net = tf.ones(shape=state_net.shape)
-        state_net = tf.cast(state_net[:, 0:self.num_actions], tf.float32)
-        state_net_tiled = tf.tile(state_net, [self.num_quantiles, 1])
+        net = slim.flatten(state)
+        net = tf.ones(shape=net.shape)
+        net = tf.cast(net[:, 0:self.num_actions], tf.float32)
+        batch_size = net.get_shape().as_list()[0]
+        net = tf.tile(net, [self.num_quantiles, 1])
 
-        batch_size = state_net.get_shape().as_list()[0]
-        quantiles_shape = [self.num_quantiles * batch_size, 1]
-        quantiles = tf.ones(quantiles_shape)
-        quantile_net = tf.tile(quantiles, [1, self.num_actions])
-        quantile_values = state_net_tiled * quantile_net
-        quantile_values = slim.fully_connected(
-            quantile_values, self.num_actions, activation_fn=None,
+        quantile_values = slim.fully_connected(net, 
+            self.num_actions, activation_fn=None,
             weights_initializer=tf.ones_initializer(),
             biases_initializer=tf.zeros_initializer())
+        
+        # create quantile list with fixed vals 
+        quantiles_shape = [self.num_quantiles * batch_size, 1]
+        quantiles = tf.tile(self.quantiles,[batch_size])
+        quantiles = tf.reshape(quantiles, quantiles_shape)
+      
         return self._get_network_type()(quantile_values=quantile_values,
                                         quantiles=quantiles)
 
@@ -88,7 +89,7 @@ class SDominatedQRAgentTest(tf.test.TestCase):
 
   def testShapes(self):
     with self.test_session(use_gpu=False) as sess:
-      agent = self._create_test_agent(sess)
+      agent = sdqr_dqn_agent.SDominatedQRAgent(sess, num_actions=self._num_actions )
 
       # Replay buffer batch size:
       self.assertEqual(agent._replay.batch_size, 32)
@@ -119,31 +120,6 @@ class SDominatedQRAgentTest(tf.test.TestCase):
                        agent._replay.batch_size)
       self.assertEqual(agent._replay_net_target_q_values.shape[1],
                        agent.num_actions)
-
-  def test_q_value_computation(self):
-    with self.test_session(use_gpu=False) as sess:
-      agent = self._create_test_agent(sess)
-      quantiles = np.ones(agent.num_quantiles)
-      q_value = np.sum(quantiles)
-      quantiles = quantiles.reshape([agent.num_quantiles, 1])
-      state = self.ones_state
-      feed_dict = {agent.state_ph: state}
-
-      q_values, q_argmax = sess.run([agent._q_values, agent._q_argmax],
-                                    feed_dict)
-
-      q_values_arr = np.ones([agent.num_actions]) * q_value
-      for i in xrange(agent.num_actions):
-        self.assertEqual(q_values[i], q_values_arr[i])
-      self.assertEqual(q_argmax, 0)
-
-      q_values_target = sess.run(agent._replay_net_target_q_values, feed_dict)
-
-      batch_size = agent._replay.batch_size
-
-      for i in xrange(batch_size):
-        for j in xrange(agent.num_actions):
-          self.assertEqual(q_values_target[i][j], q_values[j])
 
   def test_replay_quantile_value_computation(self):
     with self.test_session(use_gpu=False) as sess:
