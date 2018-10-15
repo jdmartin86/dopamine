@@ -66,9 +66,12 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     self.num_quantiles = num_quantiles
     # option to perform double dqn.
     self.double_dqn = double_dqn
-
     # just uniform over [0,1]
-    self.quantiles = tf.lin_space(0.0,1.0,self.num_quantiles)
+    self.quantiles = tf.lin_space(1.0/self.num_quantiles,
+        (self.num_quantiles-1.0)/self.num_quantiles,
+        self.num_quantiles)
+    # the return reference: for now, just a uniform rv
+    self.return_ref = tf.lin_space(0.0,10.0,self.num_quantiles)
 
     super(SDominatedQRAgent, self).__init__(
         sess=sess,
@@ -259,7 +262,7 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     # Final shape of target_quantile_values:
     # batch_size x num_quantiles x 1.
     target_quantile_values = tf.transpose(target_quantile_values, [1, 0, 2])
-
+    
     # Shape of indices: (num_quantiles x batch_size) x 1.
     # Expand dimension by one so that it can be used to index into all the
     # quantiles when using the tf.gather_nd function (see below).
@@ -318,13 +321,50 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     # Sum over current quantile value (num_quantiles) dimension,
     # average over target quantile value (num_quantiles) dimension.
     # Shape: batch_size x num_quantiles x 1.
-    loss = tf.reduce_sum(quantile_huber_loss, axis=2)
+    qr_loss = tf.reduce_sum(quantile_huber_loss, axis=2)
     # Shape: batch_size x 1.
-    loss = tf.reduce_mean(loss, axis=1)
+    qr_loss = tf.reduce_mean(qr_loss, axis=1)
 
-    # TODO(kumasaurabh): Add prioritized replay functionality here.
+    # Form the stochastic dominance loss by computing a CVaR error at
+    # every quantile point
 
-    # TODO(jdmartin86): Add stochastic dominance constraints here.
+    # Sort the target quantile values for CVaR computation
+    target_quantiles_sorted = tf.contrib.framework.sort(target_quantile_values, axis=0)
+
+    # Form the cumulative vector representing CVaR vals
+    target_quantile_sums = tf.cumsum(target_quantiles_sorted, axis=0)
+
+    # Form the cumulative vector representing reference CVaR values
+    reference_quantile_sum = tf.stop_gradient(tf.cumsum(self.return_ref, axis=0))
+
+    # Define the reference quantile values from which stochastic dominance
+    # is established. For now, the reference is a uniform rv. W
+    # We shape these to be compatible with the target values 
+    reference_quantile_sums = tf.tile(reference_quantile_sum , [batch_size]) 
+    reference_quantile_sums = tf.reshape(reference_quantile_sums, 
+                                           [batch_size, self.num_quantiles, 1])    
+
+    # stochastic dominance errors
+    sd_errors = target_quantile_sums - tf.stop_gradient(reference_quantile_sums)
+
+    # The huber loss is defined via two cases:
+    # case_one: |sd_errors| <= kappa
+    # case_two: |sd_errors| > kappa
+    sd_huber_loss_case_one = tf.to_float(
+        tf.abs(sd_errors) <= self.kappa) * 0.5 * sd_errors ** 2
+    sd_huber_loss_case_two = tf.to_float(
+        tf.abs(sd_errors) > self.kappa) * self.kappa * (
+            tf.abs(sd_errors) - 0.5 * self.kappa)
+    sd_huber_loss = sd_huber_loss_case_one + sd_huber_loss_case_two
+    sd_huber_loss = tf.to_float(sd_errors < 0.0) * sd_huber_loss 
+
+    # Sum over current quantile value (num_quantiles) dimension,
+    # average over target quantile value (num_quantiles) dimension.
+    # Shape: batch_size x num_quantiles x 1.
+    sd_loss = tf.reduce_sum(sd_huber_loss, axis=1)# TODO: add weight param
+
+    # The total loss is regularzed by the stochastic dominance constraints
+    loss = qr_loss + sd_loss
 
     update_priorities_op = tf.no_op()
     with tf.control_dependencies([update_priorities_op]):
