@@ -67,9 +67,11 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     # option to perform double dqn.
     self.double_dqn = double_dqn
     # just uniform over [0,1]
-    self.quantiles = tf.lin_space(1.0/self.num_quantiles,
-        (self.num_quantiles-1.0)/self.num_quantiles,
-        self.num_quantiles)
+    quantile_start = 1.0/(2.0*num_quantiles)
+    quantile_end = (2.0*(num_quantiles-1.0)+1.0)/(2.0*num_quantiles)
+    self.quantiles = tf.lin_space(quantile_start,
+                                  quantile_end,
+                                  self.num_quantiles)
     # the return reference: for now, just a uniform rv
     self.return_ref = tf.lin_space(0.0,10.0,self.num_quantiles)
 
@@ -178,8 +180,8 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     # Do the same for next states in the replay buffer.
     self._replay_net_target_outputs = self.target_convnet(self._replay.next_states)
     # Shape: (num_quantiles x batch_size) x num_actions.
-    vals = self._replay_net_target_outputs.quantile_values
-    self._replay_net_target_quantile_values = vals
+    self._replay_net_target_quantile_values = self._replay_net_target_outputs.quantile_values
+    self._replay_net_target_quantiles = self._replay_net_target_outputs.quantiles
 
     # Compute Q-values which are used for action selection for the next states
     # in the replay buffer. Compute the argmax over the Q-values.
@@ -198,7 +200,8 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     # Shape: batch_size x num_actions.
     self._replay_net_target_q_values = tf.squeeze(tf.reduce_mean(
         target_quantile_values_action, axis=0))
-    self._replay_next_qt_argmax = tf.argmax(
+    # Shape: batch_size x None.
+    self._replay_net_target_q_argmax = tf.argmax(
         self._replay_net_target_q_values, axis=1)
 
   def _build_target_quantile_values_op(self):
@@ -220,10 +223,9 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
                                   [self.num_quantiles, 1])
 
     # Get the indices of the maximium Q-value across the action dimension.
-    # Shape of replay_next_qt_argmax: (num_quantiles x batch_size) x 1.
-
-    replay_next_qt_argmax = tf.tile(
-        self._replay_next_qt_argmax[:, None], [self.num_quantiles, 1])
+    # Shape of replay_next_q_argmax: (num_quantiles x batch_size) x 1.
+    replay_next_q_argmax = tf.tile(
+        self._replay_net_target_q_argmax[:, None], [self.num_quantiles, 1])
 
     # Shape of batch_indices: (num_quantiles x batch_size) x 1.
     batch_indices = tf.cast(tf.range(
@@ -232,8 +234,10 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     # Shape of batch_indexed_target_values:
     # (num_quantiles x batch_size) x 2.
     batch_indexed_target_values = tf.concat(
-        [batch_indices, replay_next_qt_argmax], axis=1)
+        [batch_indices, replay_next_q_argmax], axis=1)
 
+    # Index into _replay_net_target_quantile_values with the
+    # batch and argmax indicies
     # Shape of next_target_values: (num_quantiles x batch_size) x 1.
     target_quantile_values = tf.gather_nd(
         self._replay_net_target_quantile_values,
@@ -251,13 +255,13 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
 
     target_quantile_values = tf.stop_gradient(
         self._build_target_quantile_values_op())
-    # Reshape to self.num_quantiles x batch_size x 1 since this is
+    # Reshape to num_quantiles x batch_size x 1 since this is
     # the manner in which the target_quantile_values are tiled.
     target_quantile_values = tf.reshape(target_quantile_values,
                                         [self.num_quantiles,
                                          batch_size, 1])
-    # Transpose dimensions so that the dimensionality is batch_size x
-    # self.num_quantiles x 1 to prepare for computation of
+    # Transpose dimensions so that the dimensionality is 
+    # batch_size x num_quantiles x 1 to prepare for computation of
     # Bellman errors.
     # Final shape of target_quantile_values:
     # batch_size x num_quantiles x 1.
@@ -290,10 +294,10 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     chosen_action_quantile_values = tf.transpose(
         chosen_action_quantile_values, [1, 0, 2])
 
+    # Form differences for all pairs. Thus, expand the dimension in different spots
     # Shape of bellman_erors and huber_loss:
     # batch_size x num_quantiles x num_quantiles x 1.
-    bellman_errors = target_quantile_values[
-        :, :, None, :] - chosen_action_quantile_values[:, None, :, :]
+    bellman_errors = target_quantile_values[:, :, None, :] - chosen_action_quantile_values[:, None, :, :]
     # The huber loss (see Section 2.3 of the paper) is defined via two cases:
     # case_one: |bellman_errors| <= kappa
     # case_two: |bellman_errors| > kappa

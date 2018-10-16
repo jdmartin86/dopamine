@@ -7,7 +7,7 @@ import dopamine.replay_memory.prioritized_replay_buffer
 import gin.tf.external_configurables
 
 SDominatedQRAgent.kappa = 1.0
-SDominatedQRAgent.num_quantiles = 64
+SDominatedQRAgent.num_quantiles = 32
 RainbowAgent.gamma = 0.99
 RainbowAgent.update_horizon = 3
 RainbowAgent.min_replay_history = 20000 # agent steps
@@ -24,7 +24,7 @@ RainbowAgent.optimizer = @tf.train.AdamOptimizer()
 tf.train.AdamOptimizer.learning_rate = 0.0000625
 tf.train.AdamOptimizer.epsilon = 0.00015
 
-Runner.game_name = 'Enduro'
+Runner.game_name = 'Pong'
 # Sticky actions with probability 0.25, as suggested by (Machado et al., 2017).
 Runner.sticky_actions = True
 Runner.num_iterations = 200

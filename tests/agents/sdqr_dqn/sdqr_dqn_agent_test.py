@@ -95,24 +95,29 @@ class SDominatedQRAgentTest(tf.test.TestCase):
       self.assertEqual(agent._replay.batch_size, 32)
 
       # quantile values, q-values, q-argmax at sample action time:
+      print("Net out quant vals: ", agent._net_outputs.quantile_values.shape)
+      print("Net out quants: ", agent._net_outputs.quantiles.shape)
       self.assertEqual(agent._net_outputs.quantile_values.shape[0],
                        agent.num_quantiles)
       self.assertEqual(agent._net_outputs.quantile_values.shape[1],
                        agent.num_actions)
       self.assertEqual(agent._q_values.shape[0], agent.num_actions)
+      #self.assertEqual(agent._q_argmax.shape[0], agent.num_actions) # check
 
       # Check the setting of num_actions.
       self.assertEqual(self._num_actions, agent.num_actions)
 
       # input quantiles, quantile values, and output q-values at loss
       # computation time.
+      print("Replay out quant vals: ", agent._replay_net_quantile_values.shape)
+      print("Replay out quants: ", agent._replay_net_quantiles.shape)
       self.assertEqual(agent._replay_net_quantile_values.shape[0],
                        agent.num_quantiles * agent._replay.batch_size)
       self.assertEqual(agent._replay_net_quantile_values.shape[1],
                        agent.num_actions)
 
       self.assertEqual(agent._replay_net_target_quantile_values.shape[0],
-                       agent.num_quantiles * agent._replay.batch_size)
+                       agent.num_quantiles * agent._replay.batch_size)    
       self.assertEqual(agent._replay_net_target_quantile_values.shape[1],
                        agent.num_actions)
 
@@ -120,6 +125,12 @@ class SDominatedQRAgentTest(tf.test.TestCase):
                        agent._replay.batch_size)
       self.assertEqual(agent._replay_net_target_q_values.shape[1],
                        agent.num_actions)
+
+      print("Next Q vals = " , agent._replay_net_target_q_values.shape)
+      print("Next Q argmax = " , agent._replay_net_target_q_argmax.shape)
+      self.assertEqual(agent._replay_net_target_q_argmax.shape[0],
+                       agent._replay.batch_size)
+
 
   def test_replay_quantile_value_computation(self):
     with self.test_session(use_gpu=False) as sess:
