@@ -1,19 +1,7 @@
-# Copyright 2018 John Martin Jr (jmarti3@stevens.edu).
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""The Stochastically-dominated Quantile DQN agent.
+# ICML 2019 Release
+"""The Dominating Quantile Network agent.
 
-The agent follows the description given in Martin et al. 2018 
+    Implements the Dominating Quantile Network from ICML 2019
 """
 
 from __future__ import absolute_import
@@ -35,25 +23,30 @@ slim = tf.contrib.slim
 
 
 @gin.configurable
-class SDominatedQRAgent(rainbow_agent.RainbowAgent):
-  """An extension of Rainbow to perform quantile regression with stochastic dominance constraints."""
+class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
+  """An extension of Rainbow to perform dominating quantile regression."""
 
   def __init__(self,
                sess,
                num_actions,
-               kappa=1.0,
+               ssd_lambda=1.0,
+               num_samples=32,
                num_quantiles=32,
                double_dqn=False,
                summary_writer=None,
                summary_writing_frequency=500):
     """Initializes the agent and constructs the Graph.
 
+    Most of this constructor's parameters are IQN-specific hyperparameters whose
+    values are taken from Dabney et al. (2018).
+
     Args:
       sess: `tf.Session` object for running associated ops.
       num_actions: int, number of actions the agent can take at any state.
-      kappa: float, Huber loss cutoff.
-      num_quantiles: int, number of online quantile samples for loss
+      ssd_lambda: float, SSD regularization param.
+      num_samples: int, number of quantile samples for loss
         estimation.
+      num_quantiles: int, number of quantiles for computing Q-values.
       double_dqn: boolean, whether to perform double DQN style learning
         as described in Van Hasselt et al.: https://arxiv.org/abs/1509.06461.
       summary_writer: SummaryWriter object for outputting training statistics.
@@ -61,45 +54,45 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
       summary_writing_frequency: int, frequency with which summaries will be
         written. Lower values will result in slower training.
     """
-    self.kappa = kappa
-    # num_quantiles = number of quantile atoms.
+    self.ssd_lambda = ssd_lambda
+    # num_samples = M in the paper
+    self.num_samples = num_samples
+    # num_quantiles
     self.num_quantiles = num_quantiles
     # option to perform double dqn.
     self.double_dqn = double_dqn
-    # just uniform over [0,1]
-    self.quantiles = tf.lin_space(1.0/self.num_quantiles,
-        (self.num_quantiles-1.0)/self.num_quantiles,
-        self.num_quantiles)
-    # the return reference: for now, just a uniform rv
-    self.return_ref = tf.lin_space(0.0,10.0,self.num_quantiles)
+    # benchmark CVaR values (uniform over [0,10]) 
+    # TODO: initialized in a more informed manner
+    self.benchmark_cvar = tf.lin_space(0.0,10.0,self.num_quantiles)
 
-    super(SDominatedQRAgent, self).__init__(
+    super(DominatingQuantileAgent, self).__init__(
         sess=sess,
         num_actions=num_actions,
         summary_writer=summary_writer,
         summary_writing_frequency=summary_writing_frequency)
 
   def _get_network_type(self):
-    """Returns the type of the outputs of the stochastically dominated
-    quantile network.
+    """Returns the type of the outputs of the implicit quantile network.
 
     Returns:
       _network_type object defining the outputs of the network.
     """
     return collections.namedtuple(
-        'sdq_network', ['quantile_values','quantiles'])
+        'dqn_network', ['quantile_values', 'quantiles'])
 
-  def _network_template(self, state):
-    """Builds a Stochastically-dominated Quantile ConvNet.
+  def _network_template(self, state, num_quantiles):
+    r"""Builds an Dominating Quantile ConvNet.
 
     Takes state and quantile as inputs and outputs state-action quantile values.
 
     Args:
       state: A `tf.placeholder` for the RL state.
+      num_quantiles: int, number of quantile inputs.
 
     Returns:
       _network_type object containing quantile value outputs of the network.
     """
+
     # specify parameter initialization
     weights_initializer = slim.variance_scaling_initializer(
         factor=1.0 / np.sqrt(3.0), mode='FAN_IN', uniform=True)
@@ -117,28 +110,28 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
         weights_initializer=weights_initializer)
     net = slim.flatten(net) # flatten conv output to |batch|x|flat out|
 
-    # replicate conv output for each quantile and 
-    # add fully-connected layers for each action
-    batch_size = net.get_shape().as_list()[0] 
-    net = tf.tile(net,[self.num_quantiles,1]) 
-    net = slim.fully_connected(net, 512, 
-          weights_initializer=weights_initializer)
+    net_size = net.get_shape().as_list()[-1]
+    net_tiled = tf.tile(net, [num_quantiles, 1])
 
-    # final fully-connected layer with |tau|x|A| quantile values
-    quantile_values = slim.fully_connected(net, self.num_actions, 
+    batch_size = net.get_shape().as_list()[0]
+    quantiles_shape = [num_quantiles * batch_size, 1]
+    noise = tf.random_uniform(
+        quantiles_shape, minval=0, maxval=1, dtype=tf.float32)
+
+    # Hadamard product.
+    net = tf.multiply(net_tiled, noise)
+
+    net = slim.fully_connected(net, 512, 
+        weights_initializer=weights_initializer)
+    quantile_values = slim.fully_connected(net, self.num_actions,
         activation_fn=None,
         weights_initializer=weights_initializer)
 
-    # create quantile list with fixed vals 
-    quantiles_shape = [self.num_quantiles * batch_size, 1]
-    quantiles = tf.tile(self.quantiles,[batch_size])
-    quantiles = tf.reshape(quantiles, quantiles_shape)
-
     return self._get_network_type()(quantile_values=quantile_values,
-                                    quantiles = quantiles)
+                                    quantiles=noise)
 
   def _build_networks(self):
-    """Builds the SDQR-DQN computations needed for acting and training.
+    """Builds the IQN computations needed for acting and training.
 
     These are:
       self.online_convnet: For computing the current state's quantile values.
@@ -154,39 +147,47 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     # self._get_network_template using whatever input is passed, but will always
     # share the same weights.
     self.online_convnet = tf.make_template('Online', self._network_template)
+
+    # Our implementation uses the Target network as a reference to older 
+    # weight estimates. This corresponds to mu_k in the paper.
     self.target_convnet = tf.make_template('Target', self._network_template)
 
     # Compute the Q-values which are used for action selection in the current
     # state.
-    self._net_outputs = self.online_convnet(self.state_ph)
-
+    self._net_outputs = self.online_convnet(self.state_ph,
+                                            self.num_quantiles)
     # Shape of self._net_outputs.quantile_values:
     # num_quantiles x num_actions.
     # e.g. if num_actions is 2, it might look something like this:
     # Vals for Quantile .2  Vals for Quantile .4  Vals for Quantile .6
     #    [[0.1, 0.5],         [0.15, -0.3],          [0.15, -0.2]]
-    # Q-values = [(0.1 + 0.15 + 0.15)/3, (0.5 + 0.15 + -0.2)/3].    
+    # Q-values = [(0.1 + 0.15 + 0.15)/3, (0.5 + 0.15 + -0.2)/3].
     self._q_values = tf.reduce_mean(self._net_outputs.quantile_values, axis=0)
     self._q_argmax = tf.argmax(self._q_values, axis=0)
 
-    # Compute Q-values used for batch action selection with replay states
-    self._replay_net_outputs = self.online_convnet(self._replay.states)
+    self._replay_net_outputs = self.online_convnet(self._replay.states,
+                                                   self.num_quantiles)
     # Shape: (num_quantiles x batch_size) x num_actions.
     self._replay_net_quantile_values = self._replay_net_outputs.quantile_values
     self._replay_net_quantiles = self._replay_net_outputs.quantiles
 
     # Do the same for next states in the replay buffer.
-    self._replay_net_target_outputs = self.target_convnet(self._replay.next_states)
+    self._replay_net_target_outputs = self.online_convnet( # uses online net here
+        self._replay.next_states, self.num_quantiles)
     # Shape: (num_quantiles x batch_size) x num_actions.
-    vals = self._replay_net_target_outputs.quantile_values
-    self._replay_net_target_quantile_values = vals
+    self._replay_net_target_quantile_values = self._replay_net_target_outputs.quantile_values
+
+    # Do the same for references in the replay buffer.
+    self._replay_net_reference_outputs = self.target_convnet( 
+        self._replay.states, self.num_quantiles)
+    # Shape: (num_quantiles x batch_size) x num_actions.
+    self._replay_net_reference_quantile_values = self._replay_net_reference_outputs.quantile_values
 
     # Compute Q-values which are used for action selection for the next states
     # in the replay buffer. Compute the argmax over the Q-values.
-    if self.double_dqn:
-      outputs_action = self.online_convnet(self._replay.next_states)
-    else:
-      outputs_action = self.target_convnet(self._replay.next_states)
+    # (no double DQN here)
+    outputs_action = self.online_convnet(self._replay.next_states,
+                                        self.num_quantiles)
 
     # Shape: (num_quantiles x batch_size) x num_actions.
     target_quantile_values_action = outputs_action.quantile_values
@@ -221,7 +222,6 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
 
     # Get the indices of the maximium Q-value across the action dimension.
     # Shape of replay_next_qt_argmax: (num_quantiles x batch_size) x 1.
-
     replay_next_qt_argmax = tf.tile(
         self._replay_next_qt_argmax[:, None], [self.num_quantiles, 1])
 
@@ -262,7 +262,7 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     # Final shape of target_quantile_values:
     # batch_size x num_quantiles x 1.
     target_quantile_values = tf.transpose(target_quantile_values, [1, 0, 2])
-    
+
     # Shape of indices: (num_quantiles x batch_size) x 1.
     # Expand dimension by one so that it can be used to index into all the
     # quantiles when using the tf.gather_nd function (see below).
@@ -272,6 +272,7 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
     # quantiles when using the tf.gather_nd function (see below).
     reshaped_actions = self._replay.actions[:, None]
     reshaped_actions = tf.tile(reshaped_actions, [self.num_quantiles, 1])
+
     # Shape of reshaped_actions: (num_quantiles x batch_size) x 2.
     reshaped_actions = tf.concat([indices, reshaped_actions], axis=1)
 
@@ -283,89 +284,50 @@ class SDominatedQRAgent(rainbow_agent.RainbowAgent):
                                                [self.num_quantiles,
                                                 batch_size, 1])
     # Transpose dimensions so that the dimensionality is batch_size x
-    # self.num_quantiles x 1 to prepare for computation of
+    # self.num_tau_samples x 1 to prepare for computation of
     # Bellman errors.
     # Final shape of chosen_action_quantile_values:
     # batch_size x num_quantiles x 1.
     chosen_action_quantile_values = tf.transpose(
         chosen_action_quantile_values, [1, 0, 2])
 
+    # target values are the average over quantiles for a given sample
+    # target_values shape: batch_size x 1
+    target_values = tf.reduce_mean(target_quantile_values, axis=1)
+    chosen_values = tf.reduce_mean(chosen_action_quantile_values,axis=1)
+    
     # Shape of bellman_erors and huber_loss:
-    # batch_size x num_quantiles x num_quantiles x 1.
-    bellman_errors = target_quantile_values[
-        :, :, None, :] - chosen_action_quantile_values[:, None, :, :]
-    # The huber loss (see Section 2.3 of the paper) is defined via two cases:
-    # case_one: |bellman_errors| <= kappa
-    # case_two: |bellman_errors| > kappa
-    huber_loss_case_one = tf.to_float(
-        tf.abs(bellman_errors) <= self.kappa) * 0.5 * bellman_errors ** 2
-    huber_loss_case_two = tf.to_float(
-        tf.abs(bellman_errors) > self.kappa) * self.kappa * (
-            tf.abs(bellman_errors) - 0.5 * self.kappa)
-    huber_loss = huber_loss_case_one + huber_loss_case_two
+    # batch_size x num_quantiles x 1.    
+    bellman_errors = target_values[:,None,:] - chosen_action_quantile_values
 
-    # Reshape replay_quantiles to batch_size x num_quantiles x 1
-    replay_quantiles = tf.reshape(
-        self._replay_net_quantiles, [self.num_quantiles, batch_size, 1])
-    replay_quantiles = tf.transpose(replay_quantiles, [1, 0, 2])
+    # Bellman's potential energy
+    # Shape: batch_size x num_quantiles x 1
+    bellman_potential_energy = 0.5 * bellman_errors ** 2
 
-    # Tile by num_quantiles along a new dimension. Shape is now
-    # batch_size x num_quantiles x num_quantiles x 1.
-    # These quantiles will be used for computation of the quantile huber loss
-    # below (see section 2.3 of the paper).
-    replay_quantiles = tf.to_float(tf.tile(
-        replay_quantiles[:, None, :, :], [1, self.num_quantiles, 1, 1]))
-    # Shape: batch_size x num_quantiles x num_quantiles x 1.
-    quantile_huber_loss = (tf.abs(replay_quantiles - tf.stop_gradient(
-        tf.to_float(bellman_errors < 0))) * huber_loss) / self.kappa
-    # Sum over current quantile value (num_quantiles) dimension,
-    # average over target quantile value (num_quantiles) dimension.
-    # Shape: batch_size x num_quantiles x 1.
-    qr_loss = tf.reduce_sum(quantile_huber_loss, axis=2)
-    # Shape: batch_size x 1.
-    qr_loss = tf.reduce_mean(qr_loss, axis=1)
-
-    # Form the stochastic dominance loss by computing a CVaR error at
-    # every quantile point
-
+    # SSD potential energy
     # Sort the target quantile values for CVaR computation
-    target_quantiles_sorted = tf.contrib.framework.sort(target_quantile_values, axis=0)
+    # Shape of target_quantiles_sorted: batch_size x num_quantiles x 1.
+    target_quantiles_sorted = tf.contrib.framework.sort(target_quantile_values, axis=1)
+    target_cvars = tf.cumsum(target_quantiles_sorted, axis=1)
+    ssd_potential_energy = target_cvars - tf.stop_gradient(self.benchmark_cvar[None,:,None])
+    ssd_potential_energy = tf.to_float(ssd_potential_energy > 0.0) * self.ssd_lambda * ssd_potential_energy
 
-    # Form the cumulative vector representing CVaR vals
-    target_quantile_sums = tf.cumsum(target_quantiles_sorted, axis=0)
+    # total energy loss
+    # Shape of total_energy: batch_size x num_quantiles x 1
+    total_energy = bellman_potential_energy + ssd_potential_energy
 
-    # Form the cumulative vector representing reference CVaR values
-    reference_quantile_sum = tf.stop_gradient(tf.cumsum(self.return_ref, axis=0))
+    # Entropic Wasserstein loss
+    wass_2_entropic = 0.0
 
-    # Define the reference quantile values from which stochastic dominance
-    # is established. For now, the reference is a uniform rv. W
-    # We shape these to be compatible with the target values 
-    reference_quantile_sums = tf.tile(reference_quantile_sum , [batch_size]) 
-    reference_quantile_sums = tf.reshape(reference_quantile_sums, 
-                                           [batch_size, self.num_quantiles, 1])    
-
-    # stochastic dominance errors
-    sd_errors = target_quantile_sums - tf.stop_gradient(reference_quantile_sums)
-
-    # The huber loss is defined via two cases:
-    # case_one: |sd_errors| <= kappa
-    # case_two: |sd_errors| > kappa
-    sd_huber_loss_case_one = tf.to_float(
-        tf.abs(sd_errors) <= self.kappa) * 0.5 * sd_errors ** 2
-    sd_huber_loss_case_two = tf.to_float(
-        tf.abs(sd_errors) > self.kappa) * self.kappa * (
-            tf.abs(sd_errors) - 0.5 * self.kappa)
-    sd_huber_loss = sd_huber_loss_case_one + sd_huber_loss_case_two
-    sd_huber_loss = tf.to_float(sd_errors < 0.0) * sd_huber_loss 
-
-    # Sum over current quantile value (num_quantiles) dimension,
-    # average over target quantile value (num_quantiles) dimension.
+    # total JKO loss
     # Shape: batch_size x num_quantiles x 1.
-    sd_loss = tf.reduce_sum(sd_huber_loss, axis=1)# TODO: add weight param
+    loss = wass_2_entropic + total_energy
 
-    # The total loss is regularzed by the stochastic dominance constraints
-    loss = qr_loss + sd_loss
+    # Average over quantiles dimension.
+    # Shape: batch_size x 1.
+    loss = tf.reduce_mean(loss, axis=1)
 
+    # TODO(kumasaurabh): Add prioritized replay functionality here.
     update_priorities_op = tf.no_op()
     with tf.control_dependencies([update_priorities_op]):
       if self.summary_writer is not None:
