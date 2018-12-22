@@ -26,7 +26,7 @@ from absl import flags
 from dopamine.agents.dqn import dqn_agent
 from dopamine.agents.implicit_quantile import implicit_quantile_agent
 from dopamine.agents.rainbow import rainbow_agent
-from dopamine.agents.sdqr_dqn import sdqr_dqn_agent
+from dopamine.agents.sdqn_dqn import sdqn_agent
 from dopamine.atari import run_experiment
 
 import tensorflow as tf
@@ -87,8 +87,8 @@ def create_agent(sess, environment, summary_writer=None):
     return implicit_quantile_agent.ImplicitQuantileAgent(
         sess, num_actions=environment.action_space.n,
         summary_writer=summary_writer)
-  elif FLAGS.agent_name == 'sdq_dqn':
-    return sdqr_dqn_agent.SDominatedQRAgent(
+  elif FLAGS.agent_name == 'sdqn':
+    return sdqn_agent.DominatingQuantileAgent(
         sess, num_actions=environment.action_space.n,
         summary_writer=summary_writer)
   else:
