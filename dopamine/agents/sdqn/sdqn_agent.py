@@ -324,24 +324,26 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
     total_energy = tf.reduce_mean(bellman_potential_energy + ssd_potential_energy, axis=1)
 
     # Entropic Wasserstein loss
-    
-    # Shape of reference_quantile_values:  batch_size x num_quantiles x 1. 
-    # Reshape to self.num_quantiles x batch_size x 1 since this is
-    # the manner in which the target_quantile_values are tiled.
-    reference_quantile_values = tf.stop_gradient(self._replay_net_reference_quantile_values)
-    reference_quantile_values = tf.reshape(reference_quantile_values,
-                                        [self.num_quantiles,
-                                         batch_size, 1])
+
+    chosen_action_reference_quantile_values = tf.gather_nd(
+        self._replay_net_reference_quantile_values, reshaped_actions)
+
+    # Reshape to self.num_quantiles x batch_size x 1 since this is the manner
+    # in which the quantile values are tiled.
+    chosen_action_reference_quantile_values = tf.reshape(
+        chosen_action_reference_quantile_values,
+        [self.num_quantiles, batch_size, 1])
     # Transpose dimensions so that the dimensionality is batch_size x
     # self.num_quantiles x 1 to prepare for computation of
     # Bellman errors.
-    # Final shape of target_quantile_values:
+    # Final shape of chosen_action_quantile_values:
     # batch_size x num_quantiles x 1.
-    reference_quantile_values = tf.transpose(reference_quantile_values, [1, 0, 2])
+    chosen_action_reference_quantile_values = tf.transpose(
+        chosen_action_reference_quantile_values, [1, 0, 2])
 
     # Compute the pairwise probability using a sq-euclidean cost
     # Shapes: batch_size x num_quantiles x num_quantiles x 1.    
-    pairwise_cost = chosen_action_quantile_values[:,:,None,:] - reference_quantile_values[:,None,:,:]
+    pairwise_cost = chosen_action_quantile_values[:,:,None,:] - chosen_action_reference_quantile_values[:,None,:,:]
     pairwise_cost = pairwise_cost**2
     pairwise_prob = tf.exp(-pairwise_cost/self.wass_xi-1.0-self.wass_marginal_weight/self.wass_xi) 
 
