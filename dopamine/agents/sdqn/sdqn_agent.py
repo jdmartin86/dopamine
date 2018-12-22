@@ -32,6 +32,8 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
                ssd_lambda=1.0,
                num_samples=32,
                num_quantiles=32,
+               wass_xi = 1.0,
+               wass_marginal_weight = 1.0,
                double_dqn=False,
                summary_writer=None,
                summary_writing_frequency=500):
@@ -59,6 +61,11 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
     self.num_samples = num_samples
     # num_quantiles
     self.num_quantiles = num_quantiles
+    # entropic regularized 2-Wasserstein temperature param
+    self.wass_xi = wass_xi
+    # marginal regularization param (alpha and beta in the paper)
+    self.wass_marginal_weight = 1.0
+
     # option to perform double dqn.
     self.double_dqn = double_dqn
     # benchmark CVaR values (uniform over [0,10]) 
@@ -314,18 +321,38 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
 
     # total energy loss
     # Shape of total_energy: batch_size x num_quantiles x 1
-    total_energy = bellman_potential_energy + ssd_potential_energy
+    total_energy = tf.reduce_mean(bellman_potential_energy + ssd_potential_energy, axis=1)
 
     # Entropic Wasserstein loss
-    wass_2_entropic = 0.0
+    
+    # Shape of reference_quantile_values:  batch_size x num_quantiles x 1. 
+    reference_quantile_values = tf.stop_gradient(self._replay_net_reference_quantile_values)
 
+    # Compute the pairwise probability using a sq-euclidean cost
+    # Shapes: batch_size x num_quantiles x num_quantiles x 1.    
+    pairwise_cost = chosen_action_quantile_values[:,:,None,:] - reference_quantile_values[:,None,:,:]
+    pairwise_cost = pairwise_cost**2
+    pairwise_prob = tf.exp(-pairwise_cost/self.wass_xi-1.0-self.wass_marginal_weight/self.wass_xi) 
+
+    # Shape of entropy: batch_size x num_quantiles x num_quantiles x 1
+    pairwise_entr = pairwise_prob * tf.log(pairwise_prob)
+
+    # Compute constraints for marginal projections: each needs to be 
+    # a uniform distribution. 
+    # TODO: apply unique vector weights to each
+    # Shape of marginals: batch_size x num_quantiles x 1
+    marginal_i = self.wass_marginal_weight*(tf.reduce_sum(pairwise_prob,axis=2) - 1.0/self.num_quantiles)
+    marginal_j = self.wass_marginal_weight*(tf.reduce_sum(pairwise_prob,axis=1) - 1.0/self.num_quantiles)
+
+    # Take the Frobenius norm to compute W2 metric
+    # Shape: batch_size x 1. 
+    wass_2_entropic = pairwise_prob*pairwise_cost + self.wass_xi*pairwise_entr + marginal_i + marginal_j
+    wass_2_entropic = tf.reduce_sum(wass_2_entropic,axis=1)
+    wass_2_entropic = tf.reduce_sum(wass_2_entropic,axis=2)
+    
     # total JKO loss
-    # Shape: batch_size x num_quantiles x 1.
-    loss = wass_2_entropic + total_energy
-
-    # Average over quantiles dimension.
     # Shape: batch_size x 1.
-    loss = tf.reduce_mean(loss, axis=1)
+    loss = wass_2_entropic + total_energy
 
     # TODO(kumasaurabh): Add prioritized replay functionality here.
     update_priorities_op = tf.no_op()
