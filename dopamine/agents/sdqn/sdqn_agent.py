@@ -326,7 +326,18 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
     # Entropic Wasserstein loss
     
     # Shape of reference_quantile_values:  batch_size x num_quantiles x 1. 
+    # Reshape to self.num_quantiles x batch_size x 1 since this is
+    # the manner in which the target_quantile_values are tiled.
     reference_quantile_values = tf.stop_gradient(self._replay_net_reference_quantile_values)
+    reference_quantile_values = tf.reshape(reference_quantile_values,
+                                        [self.num_quantiles,
+                                         batch_size, 1])
+    # Transpose dimensions so that the dimensionality is batch_size x
+    # self.num_quantiles x 1 to prepare for computation of
+    # Bellman errors.
+    # Final shape of target_quantile_values:
+    # batch_size x num_quantiles x 1.
+    reference_quantile_values = tf.transpose(reference_quantile_values, [1, 0, 2])
 
     # Compute the pairwise probability using a sq-euclidean cost
     # Shapes: batch_size x num_quantiles x num_quantiles x 1.    
