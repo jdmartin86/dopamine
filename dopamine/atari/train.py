@@ -26,7 +26,7 @@ from absl import flags
 from dopamine.agents.dqn import dqn_agent
 from dopamine.agents.implicit_quantile import implicit_quantile_agent
 from dopamine.agents.rainbow import rainbow_agent
-from dopamine.agents.sdqn_dqn import sdqn_agent
+from dopamine.agents.sdqn import sdqn_agent
 from dopamine.atari import run_experiment
 
 import tensorflow as tf
