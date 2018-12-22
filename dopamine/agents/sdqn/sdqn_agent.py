@@ -359,8 +359,7 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
 
     # Take the Frobenius norm to compute W2 metric
     # Shape: batch_size x 1. 
-    wass_2_entropic = pairwise_prob*pairwise_cost + self.wass_xi*pairwise_entr + marginal_i + marginal_j
-    wass_2_entropic = tf.reduce_sum(wass_2_entropic,axis=1)
+    wass_2_entropic = tf.reduce_sum(pairwise_prob*pairwise_cost + self.wass_xi*pairwise_entr,axis=1) + marginal_i + marginal_j
     wass_2_entropic = tf.reduce_sum(wass_2_entropic,axis=2)
     
     # total JKO loss
