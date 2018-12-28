@@ -68,6 +68,29 @@ for additional details.
 Finally, these instructions are for Python 2.7. While Dopamine is Python 3
 compatible, there may be some additional steps needed during installation.
 
+### Google Cloud Compute Engine
+On a fresh compute engine, we need to install build essentials and g++ before othere Dopamine dependencies.
+```
+sudo apt-get install build-essential 
+sudo apt-get install g++
+```
+Next we need to install Cuda 
+```
+curl -O https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
+sudo dpkg -i cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
+sudo apt-get update
+sudo apt-get install cuda-9-0
+sudo nvidia-smi -pm 1
+```
+Follow [these instructions](https://developer.nvidia.com/cuda-90-download-archive?target_os=Linux&target_arch=x86_64&target_distro=Ubuntu&target_version=1604&target_type=debnetwork) for the network download 
+```
+wget http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
+sudo dpkg -i cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
+sudo apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub
+sudo apt-get update
+sudo apt-get install cuda
+```
+
 #### Ubuntu
 
 First set up the virtual environment:
@@ -129,21 +152,6 @@ Finally, download the Dopamine source, e.g.
 
 ```
 git clone https://github.com/google/dopamine.git
-```
-
-### Google Cloud Compute Engine
-On a fresh compute engine, we need to install build essentials and g++ before othere Dopamine dependencies.
-```
-sudo apt-get install build-essential 
-sudo apt-get install g++
-```
-Next we need to install Cuda 
-```
-curl -O https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
-sudo dpkg -i cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
-sudo apt-get update
-sudo apt-get install cuda-9-0
-sudo nvidia-smi -pm 1
 ```
 
 #### Running tests
