@@ -131,6 +131,21 @@ Finally, download the Dopamine source, e.g.
 git clone https://github.com/google/dopamine.git
 ```
 
+### Google Cloud Compute Engine
+On a fresh compute engine, we need to install build essentials and g++ before othere Dopamine dependencies.
+```
+sudo apt-get install build-essential 
+sudo apt-get install g++
+```
+Next we need to install Cuda 
+```
+curl -O https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
+sudo dpkg -i cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
+sudo apt-get update
+sudo apt-get install cuda-9-0
+sudo nvidia-smi -pm 1
+```
+
 #### Running tests
 
 You can test whether the installation was successful by running the following:
