@@ -130,10 +130,10 @@ During installation, you may safely ignore the following error message:
 *tensorflow 1.10.1 has requirement numpy<=1.14.5,>=1.13.3, but you'll have
 numpy 1.15.1 which is incompatible*.
 
-Finally, download the Dopamine source, e.g.
+Finally, download the Dopamine fork source, e.g.
 
 ```
-git clone https://github.com/google/dopamine.git
+git clone https://github.com/jdmartin86/dopamine.git
 ```
 
 #### Mac OS X
