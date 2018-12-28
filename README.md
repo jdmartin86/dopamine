@@ -77,6 +77,7 @@ On a fresh compute engine, we need to install build essentials and g++ before ot
 * Location: central1-c
 
 ```
+sudo apt-get update
 sudo apt-get install build-essential 
 sudo apt-get install g++
 ```
