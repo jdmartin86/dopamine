@@ -95,6 +95,14 @@ Download libcunn7 from [here](https://developer.download.nvidia.com/compute/mach
 curl -O https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1604/x86_64/libcudnn7_7.4.2.24-1+cuda9.0_amd64.deb
 sudo dpkg -i libcudnn7_7.4.2.24-1+cuda9.0_amd64.deb
 ```
+Finally configure the GPU
+```
+# this applies to all GPUs
+sudo nvidia-smi -pm 1
+# these only apply to Nvidia Tesla K80s
+sudo nvidia-smi -ac 2505,875
+sudo nvidia-smi --auto-boost-default=DISABLED
+```
 
 #### Ubuntu
 
