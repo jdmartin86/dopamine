@@ -36,5 +36,5 @@ Runner.training_steps = 250000
 Runner.evaluation_steps = 125000
 Runner.max_steps_per_episode = 27000
 
-WrappedPrioritizedReplayBuffer.replay_capacity = 1000000
+WrappedPrioritizedReplayBuffer.replay_capacity = 1000
 WrappedPrioritizedReplayBuffer.batch_size = 32
