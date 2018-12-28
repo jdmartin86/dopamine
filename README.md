@@ -69,7 +69,13 @@ Finally, these instructions are for Python 2.7. While Dopamine is Python 3
 compatible, there may be some additional steps needed during installation.
 
 ### Google Cloud Compute Engine
-On a fresh compute engine, we need to install build essentials and g++ before othere Dopamine dependencies.
+On a fresh compute engine, we need to install build essentials and g++ before othere Dopamine dependencies. Make sure the instance more or less follows the template below 
+* 1 vCPU
+* 1 GPU
+* Ubunutu 16.04
+* 100GB persistent memory
+* Location: central1-c
+
 ```
 sudo apt-get install build-essential 
 sudo apt-get install g++
