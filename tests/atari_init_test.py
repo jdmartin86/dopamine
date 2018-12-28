@@ -34,6 +34,7 @@ class AtariInitTest(tf.test.TestCase):
         '/tmp/dopamine_tests',
         datetime.datetime.utcnow().strftime('run_%Y_%m_%d_%H_%M_%S'))
     FLAGS.agent_name = 'dqn'
+    FLAGS( [ '--gin_files' ] )
     FLAGS.gin_files = ['dopamine/agents/dqn/configs/dqn.gin']
     # `num_iterations` set to zero to prevent runner execution.
     FLAGS.gin_bindings = [
