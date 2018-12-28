@@ -90,13 +90,10 @@ sudo apt-get update
 sudo apt-get install cuda-9-0
 sudo nvidia-smi -pm 1
 ```
-Follow [these instructions](https://developer.nvidia.com/cuda-90-download-archive?target_os=Linux&target_arch=x86_64&target_distro=Ubuntu&target_version=1604&target_type=debnetwork) for the network download 
+Download libcunn7 from [here](https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1604/x86_64/), then run
 ```
-wget http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
-sudo dpkg -i cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
-sudo apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub
-sudo apt-get update
-sudo apt-get install cuda
+curl -O https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1604/x86_64/libcudnn7_7.4.2.24-1+cuda9.0_amd64.deb
+sudo dpkg -i libcudnn7_7.4.2.24-1+cuda9.0_amd64.deb
 ```
 
 #### Ubuntu
