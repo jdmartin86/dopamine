@@ -316,8 +316,8 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
     # Shape of target_quantiles_sorted: batch_size x num_quantiles x 1.
     target_quantiles_sorted = tf.contrib.framework.sort(target_quantile_values, axis=1)
     target_cvars = tf.cumsum(target_quantiles_sorted, axis=1)
-    ssd_potential_energy = target_cvars - tf.stop_gradient(self.benchmark_cvar[None,:,None])
-    ssd_potential_energy = tf.to_float(ssd_potential_energy > 0.0) * self.ssd_lambda * ssd_potential_energy
+    dispersion_area = target_cvars - tf.stop_gradient(self.benchmark_cvar[None,:,None])
+    ssd_potential_energy = tf.to_float(dispersion_area < 0.0) * self.ssd_lambda * dispersion_area
 
     # total energy loss
     # Shape of total_energy: batch_size x num_quantiles x 1
@@ -371,5 +371,6 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
     with tf.control_dependencies([update_priorities_op]):
       if self.summary_writer is not None:
         with tf.variable_scope('Losses'):
-          tf.summary.scalar('QuantileLoss', tf.reduce_mean(loss))
+          tf.summary.scalar('EnergyLoss', tf.reduce_mean(loss))
+          tf.summary.scalar('DispersionLoss', tf.reduce_mean(tf.reduce_mean(dispersion_area,axis=1)))
       return self.optimizer.minimize(tf.reduce_mean(loss)), tf.reduce_mean(loss)
