@@ -317,7 +317,7 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
     target_quantiles_sorted = tf.contrib.framework.sort(target_quantile_values, axis=1)
     target_cvars = tf.cumsum(target_quantiles_sorted, axis=1)
     dispersion_area = target_cvars - tf.stop_gradient(self.benchmark_cvar[None,:,None])
-    ssd_potential_energy = tf.to_float(dispersion_area < 0.0) * self.ssd_lambda * dispersion_area
+    ssd_potential_energy = tf.to_float(dispersion_area > 0.0) * self.ssd_lambda * dispersion_area
 
     # total energy loss
     # Shape of total_energy: batch_size x num_quantiles x 1
