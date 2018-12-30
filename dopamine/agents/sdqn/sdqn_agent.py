@@ -322,8 +322,7 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
 
     # Total energy loss
     # Shape of total_energy: batch_size x 1
-    total_energy = tf.reduce_mean(bellman_potential_energy, axis=1) + 
-                   tf.reduce_sum(ssd_potential_energy, axis=1)
+    total_energy = tf.reduce_mean(bellman_potential_energy, axis=1) + tf.reduce_sum(ssd_potential_energy, axis=1)
 
     #
     # Entropic Wasserstein loss
