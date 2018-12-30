@@ -315,16 +315,18 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
     # Sort the target quantile values for CVaR computation
     # Shape of target_quantiles_sorted: batch_size x num_quantiles x 1.
     target_quantiles_sorted = tf.contrib.framework.sort(target_quantile_values, axis=1)
-    target_cvars = tf.cumsum(target_quantiles_sorted, axis=1)
-    dispersion_area = target_cvars - tf.stop_gradient(self.benchmark_cvar[None,:,None])
-    ssd_potential_energy = tf.to_float(dispersion_area > 0.0) * self.ssd_lambda * dispersion_area
+    target_cvars = 1.0/self.num_quantiles *tf.cumsum(target_quantiles_sorted, axis=1)
+    benchmark_cvars = 1.0/self.num_quantiles * tf.cumsum(self.benchmark_cvar)[None,:,None]
+    dispersion_area = target_cvars - tf.stop_gradient(benchmark_cvars)
+    ssd_potential_energy = tf.to_float(dispersion_area < 0.0) * self.ssd_lambda * dispersion_area
 
-    # total energy loss
-    # Shape of total_energy: batch_size x num_quantiles x 1
-    total_energy = tf.reduce_mean(bellman_potential_energy + ssd_potential_energy, axis=1)
+    # Total energy loss
+    # Shape of total_energy: batch_size x 1
+    total_energy = tf.reduce_mean(bellman_potential_energy, axis=1) + 
+                   tf.reduce_sum(ssd_potential_energy, axis=1)
 
+    #
     # Entropic Wasserstein loss
-
     chosen_action_reference_quantile_values = tf.gather_nd(
         self._replay_net_reference_quantile_values, reshaped_actions)
 
