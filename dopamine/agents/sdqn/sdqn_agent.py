@@ -126,7 +126,8 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
         quantiles_shape, minval=0, maxval=1, dtype=tf.float32)
 
     # Hadamard product.
-    net = tf.multiply(net_tiled, noise)
+    net = net_tiled # TODO: removing noise for test purposes
+    #net = tf.multiply(net_tiled, noise)
 
     net = slim.fully_connected(net, 512, 
         weights_initializer=weights_initializer)
