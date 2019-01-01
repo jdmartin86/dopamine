@@ -306,7 +306,8 @@ class DominatingQuantileAgent(rainbow_agent.RainbowAgent):
     
     # Shape of bellman_erors and huber_loss:
     # batch_size x num_quantiles x 1.    
-    bellman_errors = target_values[:,None,:] - chosen_action_quantile_values
+    # bellman_errors = target_values[:,None,:] - chosen_action_quantile_values #TODO: testing different targets (1/1/19)
+    bellman_errors = target_quantile_values - chosen_action_quantile_values #TODO: testing different targets (1/1/19)
 
     # Bellman's potential energy
     # Shape: batch_size x num_quantiles x 1
