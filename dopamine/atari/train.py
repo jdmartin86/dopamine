@@ -24,7 +24,7 @@ from __future__ import print_function
 from absl import app
 from absl import flags
 from dopamine.agents.dqn import dqn_agent
-from dopamine.agents.implicit_quantile import implicit_quantile_agent
+from dopamine.agents.dominant_particle import dominant_particle_agent
 from dopamine.agents.rainbow import rainbow_agent
 from dopamine.agents.sdqn import sdqn_agent
 from dopamine.atari import run_experiment
@@ -83,8 +83,8 @@ def create_agent(sess, environment, summary_writer=None):
     return rainbow_agent.RainbowAgent(
         sess, num_actions=environment.action_space.n,
         summary_writer=summary_writer)
-  elif FLAGS.agent_name == 'implicit_quantile':
-    return implicit_quantile_agent.ImplicitQuantileAgent(
+  elif FLAGS.agent_name == 'dominant_particle':
+    return dominant_particle_agent.DominantParticleAgent(
         sess, num_actions=environment.action_space.n,
         summary_writer=summary_writer)
   elif FLAGS.agent_name == 'sdqn':
