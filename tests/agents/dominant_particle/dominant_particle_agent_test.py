@@ -41,11 +41,59 @@ class DominantParticleAgentTest(tf.test.TestCase):
     # Verifies that we can create and train an agent with the default values.
     with self.test_session(use_gpu=False) as sess:
       agent = dominant_particle_agent.DominantParticleAgent(sess, num_actions=4)
-      #sess.run(tf.global_variables_initializer())
-      #observation = np.ones([84, 84, 1])
-      #agent.begin_episode(observation)
-      #agent.step(reward=1, observation=observation)
-      #agent.end_episode(reward=1)
+      sess.run(tf.global_variables_initializer())
+      observation = np.ones([84, 84, 1])
+      agent.begin_episode(observation)
+      agent.step(reward=1, observation=observation)
+      agent.end_episode(reward=1)
   
+  def testShapes(self):
+    with self.test_session(use_gpu=False) as sess:
+      agent = dominant_particle_agent.DominantParticleAgent(sess, num_actions=4)
+
+      # Replay buffer batch size:
+      self.assertEqual(agent._replay.batch_size, 32)
+
+      # particle locs, q-values, q-argmax at sample action time:
+      self.assertEqual(agent._net_outputs.particle_locs.shape[0],
+                       agent.num_particles)
+      self.assertEqual(agent._net_outputs.particle_locs.shape[1],
+                       agent.num_actions)
+      self.assertEqual(agent._q_values.shape[0], agent.num_actions)
+
+      # Check the setting of num_actions.
+      self.assertEqual(self._num_actions, agent.num_actions)
+
+      # input particles, particle locs, and output q-values at loss
+      # computation time.
+      self.assertEqual(agent._replay_net_particle_locs.shape[0],
+                       agent.num_particles * agent._replay.batch_size)
+      self.assertEqual(agent._replay_net_particle_locs.shape[1],
+                       agent.num_actions)
+
+      self.assertEqual(agent._replay_net_target_particle_locs.shape[0],
+                       agent.num_target_samples * agent._replay.batch_size * agent.num_particles)
+      self.assertEqual(agent._replay_net_target_particle_locs.shape[1],
+                       agent.num_actions)
+
+      self.assertEqual(agent._replay_net_target_q_values.shape[0],
+                       agent.num_target_samples * agent._replay.batch_size)
+      self.assertEqual(agent._replay_net_target_q_values.shape[1],
+                       agent.num_actions)
+
+  def test_q_value_computation(self):
+    with self.test_session(use_gpu=False) as sess:
+      agent = dominant_particle_agent.DominantParticleAgent(sess, num_actions=4)
+      agent.eval_mode = True
+      sess.run(tf.global_variables_initializer())
+
+      state = self.ones_state
+      feed_dict = {agent.state_ph: state}
+      q_values, q_argmax = sess.run([agent._q_values, agent._q_argmax],
+                                    feed_dict)
+      for i in range(agent.num_actions):
+        print("q_values: ", q_values[i])
+      print("q_argmax: ", q_argmax)
+      
 if __name__ == '__main__':
   tf.test.main()
