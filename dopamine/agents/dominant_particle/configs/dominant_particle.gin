@@ -1,0 +1,42 @@
+# Hyperparameters for the Dominant Particle Agent
+
+import dopamine.agents.dominant_particle.dominant_particle_agent
+import dopamine.agents.rainbow.rainbow_agent
+import dopamine.atari.run_experiment
+import dopamine.replay_memory.prioritized_replay_buffer
+import gin.tf.external_configurables
+
+DominantParticleAgent.num_particles = 64
+DominantParticleAgent.num_target_samples = 32
+DominantParticleAgent.seed_dim = 5
+DominantParticleAgent.blur = 0.05
+DominantParticleAgent.scaling = 0.5
+DominantParticleAgent.tau = 0.1
+DominantParticleAgent.double_dqn = False
+
+RainbowAgent.gamma = 0.99
+RainbowAgent.update_horizon = 3
+RainbowAgent.min_replay_history = 20000 # agent steps
+RainbowAgent.update_period = 4
+RainbowAgent.target_update_period = 8000 # agent steps
+RainbowAgent.epsilon_train = 0.01
+RainbowAgent.epsilon_eval = 0.001
+RainbowAgent.epsilon_decay_period = 250000  # agent steps
+# DPN currently does not support prioritized replay.
+RainbowAgent.replay_scheme = 'uniform'
+RainbowAgent.tf_device = '/gpu:0'  # '/cpu:*' use for non-GPU version
+RainbowAgent.optimizer = @tf.train.AdamOptimizer()
+
+tf.train.AdamOptimizer.learning_rate = 0.0000625
+tf.train.AdamOptimizer.epsilon = 0.00015
+
+Runner.game_name = 'Pong'
+# Sticky actions with probability 0.25, as suggested by (Machado et al., 2017).
+Runner.sticky_actions = True
+Runner.num_iterations = 200
+Runner.training_steps = 250000
+Runner.evaluation_steps = 125000
+Runner.max_steps_per_episode = 27000
+
+WrappedPrioritizedReplayBuffer.replay_capacity = 1000
+WrappedPrioritizedReplayBuffer.batch_size = 32
